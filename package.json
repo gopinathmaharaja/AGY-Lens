@@ -4,6 +4,11 @@
   "description": "Your personal AI usage analyst and prompting coach for Gemini Antigravity",
   "version": "0.1.0",
   "publisher": "antigravity",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antigravity/antigravity-usage-intelligence"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -163,7 +168,12 @@
         },
         "antigravity.ai.provider": {
           "type": "string",
-          "enum": ["gemini", "openai", "claude", "ollama"],
+          "enum": [
+            "gemini",
+            "openai",
+            "claude",
+            "ollama"
+          ],
           "default": "gemini",
           "description": "AI provider for optional remote prompt improvements."
         },
@@ -187,6 +197,7 @@
     "build:extension": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "build:webview": "vite build --config vite.config.webview.ts",
     "build": "npm run build:webview && npm run build:extension",
+    "package": "vsce package --no-dependencies",
     "test": "vitest run",
     "lint": "eslint src/ --ext .ts",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"webview-ui/**/*.{ts,tsx}\""
@@ -198,6 +209,7 @@
     "@types/sql.js": "^1.4.9",
     "@types/vscode": "^1.85.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.20.0",
     "prettier": "^3.2.4",
     "typescript": "^5.3.3",
