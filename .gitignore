@@ -1,0 +1,23 @@
+# Node dependencies
+node_modules/
+dist/
+out/
+build/
+
+# Package archives
+*.vsix
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+*.db-shm
+*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.local

@@ -1,0 +1,215 @@
+{
+  "name": "antigravity-usage-intelligence",
+  "displayName": "Antigravity Usage Intelligence",
+  "description": "Your personal AI usage analyst and prompting coach for Gemini Antigravity",
+  "version": "0.1.0",
+  "publisher": "antigravity",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Productivity",
+    "Other"
+  ],
+  "keywords": [
+    "antigravity",
+    "gemini",
+    "ai",
+    "quota",
+    "tokens",
+    "prompts",
+    "analytics"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "antigravity.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.refresh",
+        "title": "Refresh",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.analyzePrompt",
+        "title": "Analyze Prompt",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.improvePrompt",
+        "title": "Improve Prompt",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.showTodayUsage",
+        "title": "Show Today's Usage",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.showModelUsage",
+        "title": "Show Model Usage",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.exportData",
+        "title": "Export Data",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.importData",
+        "title": "Import Data",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.openSettings",
+        "title": "Open Settings",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.openLogs",
+        "title": "Open Logs",
+        "category": "Antigravity Usage"
+      },
+      {
+        "command": "antigravity.resetLocalData",
+        "title": "Reset Local Data",
+        "category": "Antigravity Usage"
+      }
+    ],
+    "configuration": {
+      "title": "Antigravity Usage Intelligence",
+      "properties": {
+        "antigravity.enableExtension": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Antigravity Usage Intelligence background monitoring."
+        },
+        "antigravity.refreshInterval": {
+          "type": "number",
+          "default": 30,
+          "description": "Background refresh interval in seconds."
+        },
+        "antigravity.retentionPeriodDays": {
+          "type": "number",
+          "default": 90,
+          "description": "Data retention period in days."
+        },
+        "antigravity.privacy.storePrompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Store local prompts for quality scoring and analytics."
+        },
+        "antigravity.privacy.storeSourceCode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Store source code blocks detected in prompts."
+        },
+        "antigravity.privacy.externalAiAnalysis": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow external AI providers to analyze prompts (disabled by default)."
+        },
+        "antigravity.privacy.secretRedaction": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically redact API keys, tokens, and credentials before storage or analysis."
+        },
+        "antigravity.analytics.promptScoring": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable prompt quality heuristic scoring."
+        },
+        "antigravity.analytics.modelRecommendations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable model selection recommendations."
+        },
+        "antigravity.analytics.conversationAnalysis": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable conversation efficiency and repetition detection."
+        },
+        "antigravity.analytics.forecasting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Calculate quota usage trends and estimated reset forecasts."
+        },
+        "antigravity.ui.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Antigravity status and quota in the VS Code status bar."
+        },
+        "antigravity.ui.notifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notifications for critical context limits and quota warnings."
+        },
+        "antigravity.ui.contextWarningThreshold": {
+          "type": "number",
+          "default": 80,
+          "description": "Context window percentage that triggers a warning."
+        },
+        "antigravity.ui.contextCriticalThreshold": {
+          "type": "number",
+          "default": 90,
+          "description": "Context window percentage that triggers a critical alert."
+        },
+        "antigravity.ai.provider": {
+          "type": "string",
+          "enum": ["gemini", "openai", "claude", "ollama"],
+          "default": "gemini",
+          "description": "AI provider for optional remote prompt improvements."
+        },
+        "antigravity.ai.model": {
+          "type": "string",
+          "default": "gemini-1.5-flash",
+          "description": "Model identifier for optional remote AI provider."
+        },
+        "antigravity.ai.ollamaEndpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama local API endpoint."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build:extension": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "build:webview": "vite build --config vite.config.webview.ts",
+    "build": "npm run build:webview && npm run build:extension",
+    "test": "vitest run",
+    "lint": "eslint src/ --ext .ts",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"webview-ui/**/*.{ts,tsx}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/sql.js": "^1.4.9",
+    "@types/vscode": "^1.85.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "esbuild": "^0.20.0",
+    "prettier": "^3.2.4",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "vitest": "^1.2.1"
+  },
+  "dependencies": {
+    "lucide-react": "^0.312.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.10.4",
+    "sql.js": "^1.10.2",
+    "zod": "^3.22.4"
+  }
+}
