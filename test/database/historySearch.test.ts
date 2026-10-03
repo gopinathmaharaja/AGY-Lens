@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import '../setup';
 import { AppDatabase } from '../../src/database/database';
 import { PromptRepository } from '../../src/database/repositories/promptRepository';
 
