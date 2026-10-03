@@ -110,4 +110,92 @@ describe('Database and Repositories', () => {
     expect(latest).toBeDefined();
     expect(latest?.remaining).toBe(82);
   });
+
+  it('should seamlessly migrate a legacy database that lacked source column and newer fields', () => {
+    const legacyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'antigravity-legacy-'));
+    const legacyDbPath = path.join(legacyDir, 'legacy.db');
+
+    // Simulate an older v0.0.x database schema
+    const { DatabaseSync } = require('node:sqlite');
+    const rawDb = new DatabaseSync(legacyDbPath);
+    rawDb.exec(`
+      CREATE TABLE sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT UNIQUE NOT NULL,
+        workspace TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL DEFAULT '',
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        agent_state TEXT NOT NULL DEFAULT 'IDLE',
+        title TEXT NOT NULL DEFAULT '',
+        step_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE prompts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT,
+        prompt TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'Other',
+        prompt_score REAL NOT NULL DEFAULT 0,
+        clarity_score REAL DEFAULT 0,
+        context_score REAL DEFAULT 0,
+        missing_items TEXT DEFAULT ''
+      );
+      CREATE TABLE quota (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        model TEXT NOT NULL,
+        remaining REAL,
+        reset_time TEXT,
+        timestamp TEXT NOT NULL,
+        is_estimate INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    rawDb.close();
+
+    // Opening with AppDatabase should migrate without throwing "no such column: source"
+    expect(() => {
+      const migratedDb = new AppDatabase(legacyDir, 'legacy.db');
+      // Test repositories on migrated DB
+      const sRepo = new SessionRepository(migratedDb);
+      const pRepo = new PromptRepository(migratedDb);
+      const qRepo = new QuotaRepository(migratedDb);
+
+      sRepo.upsert({
+        conversation_id: 'legacy-conv',
+        workspace: '/test',
+        model: 'Gemini 3.8 Flash (High)',
+        started_at: '2026-10-02T10:00:00Z',
+        agent_state: 'IDLE',
+        step_count: 1,
+        source: 'ide'
+      });
+
+      pRepo.insert({
+        session_id: 'legacy-conv',
+        prompt: 'Migrated test prompt',
+        timestamp: '2026-10-02T10:05:00Z',
+        category: 'Test',
+        source: 'ide'
+      });
+
+      qRepo.recordQuota({
+        model: 'Gemini 3.8 Flash (High)',
+        remaining: 90,
+        reset_time: null,
+        timestamp: '2026-10-02T10:05:00Z',
+        source: 'observed'
+      });
+
+      const session = sRepo.getByConversationId('legacy-conv');
+      expect(session?.source).toBe('ide');
+      expect(pRepo.getBySessionId('legacy-conv')[0].source).toBe('ide');
+
+      migratedDb.close();
+    }).not.toThrow();
+
+    try {
+      fs.rmSync(legacyDir, { recursive: true, force: true });
+    } catch {}
+  });
 });
+

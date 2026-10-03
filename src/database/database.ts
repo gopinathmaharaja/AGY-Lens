@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { SCHEMA_SQL, MIGRATION_SQL, COLUMN_MIGRATIONS } from './schema';
+import { SCHEMA_SQL, MIGRATION_SQL, COLUMN_MIGRATIONS, INDEXES_SQL } from './schema';
 
 export interface IDatabase {
   exec(sql: string): void;
@@ -39,15 +39,24 @@ export class AppDatabase implements IDatabase {
       // Migration may fail if table doesn't exist, that's fine
     }
 
-    // Create schema (IF NOT EXISTS is safe to re-run)
+    // 1. Create tables if they do not exist
     this.exec(SCHEMA_SQL);
 
-    // Run column migrations safely — each may fail if column already exists
+    // 2. Run column migrations safely — each may fail if column already exists
     for (const sql of COLUMN_MIGRATIONS) {
       try {
         this.exec(sql);
       } catch {
         // Column already exists, skip
+      }
+    }
+
+    // 3. Create indexes AFTER column migrations guarantee all indexed columns exist
+    for (const sql of INDEXES_SQL) {
+      try {
+        this.exec(sql);
+      } catch {
+        // Index already exists or creation skipped, safe to ignore
       }
     }
   }

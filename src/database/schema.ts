@@ -75,17 +75,22 @@ CREATE TABLE IF NOT EXISTS insights (
   severity TEXT NOT NULL DEFAULT 'info',
   created_at TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_sessions_conv ON sessions(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
-CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
-CREATE INDEX IF NOT EXISTS idx_prompts_timestamp ON prompts(timestamp);
-CREATE INDEX IF NOT EXISTS idx_prompts_category ON prompts(category);
-CREATE INDEX IF NOT EXISTS idx_prompts_session ON prompts(session_id);
-CREATE INDEX IF NOT EXISTS idx_prompts_session_step ON prompts(session_id, step_index);
-CREATE INDEX IF NOT EXISTS idx_usage_snapshots_session ON usage_snapshots(session_id);
-CREATE INDEX IF NOT EXISTS idx_quota_timestamp ON quota(timestamp);
 `;
+
+/**
+ * Indexes to create AFTER tables and columns have been migrated.
+ */
+export const INDEXES_SQL: string[] = [
+  'CREATE INDEX IF NOT EXISTS idx_sessions_conv ON sessions(conversation_id)',
+  'CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at)',
+  'CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source)',
+  'CREATE INDEX IF NOT EXISTS idx_prompts_timestamp ON prompts(timestamp)',
+  'CREATE INDEX IF NOT EXISTS idx_prompts_category ON prompts(category)',
+  'CREATE INDEX IF NOT EXISTS idx_prompts_session ON prompts(session_id)',
+  'CREATE INDEX IF NOT EXISTS idx_prompts_session_step ON prompts(session_id, step_index)',
+  'CREATE INDEX IF NOT EXISTS idx_usage_snapshots_session ON usage_snapshots(session_id)',
+  'CREATE INDEX IF NOT EXISTS idx_quota_timestamp ON quota(timestamp)',
+];
 
 /**
  * Migration SQL to run on existing databases.
@@ -116,4 +121,6 @@ export const COLUMN_MIGRATIONS: string[] = [
   `ALTER TABLE prompts ADD COLUMN estimated_input_tokens INTEGER DEFAULT 0`,
   `ALTER TABLE prompts ADD COLUMN estimated_output_tokens INTEGER DEFAULT 0`,
   `ALTER TABLE prompts ADD COLUMN word_count INTEGER DEFAULT 0`,
+  `ALTER TABLE usage_snapshots ADD COLUMN source TEXT NOT NULL DEFAULT 'cli'`,
+  `ALTER TABLE quota ADD COLUMN source TEXT NOT NULL DEFAULT 'observed'`,
 ];

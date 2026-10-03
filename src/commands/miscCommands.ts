@@ -22,11 +22,12 @@ export async function resetLocalDataCommand(db: AppDatabase, refreshCallback: ()
     db.exec(`
       DELETE FROM sessions;
       DELETE FROM prompts;
-      DELETE FROM usage;
       DELETE FROM quota;
       DELETE FROM recommendations;
       DELETE FROM insights;
     `);
+    try { db.exec('DELETE FROM usage_snapshots;'); } catch {}
+    try { db.exec('DELETE FROM usage;'); } catch {}
     vscode.window.showInformationMessage('Local Antigravity analytics data has been cleared.');
     refreshCallback();
   }
