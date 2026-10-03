@@ -27,12 +27,6 @@ export class StatusBarManager implements vscode.Disposable {
       return;
     }
 
-    const quotaText =
-      snapshot.quotaRemaining !== null && snapshot.quotaRemaining !== undefined
-        ? `${snapshot.quotaRemaining}%`
-        : 'N/A';
-
-    const countdown = StatusParser.formatCountdown(snapshot.quotaResetTime);
     const shortModel = snapshot.model?.replace(/ \(.*?\)/, '') || 'Gemini';
 
     // State icon
@@ -43,16 +37,21 @@ export class StatusBarManager implements vscode.Disposable {
       icon = '$(error)';
     }
 
-    this.statusBarItem.text = `${icon} AG: ${shortModel} | ${quotaText}`;
+    const todayTokensK = Math.round((snapshot.todayTokens || 0) / 1000);
+    this.statusBarItem.text = `${icon} AG: ${shortModel} | ${todayTokensK}k`;
 
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
     md.supportThemeIcons = true;
     md.appendMarkdown(`### Antigravity Usage Intelligence\n\n`);
     md.appendMarkdown(`- **Model:** ${snapshot.model || 'N/A'}\n`);
-    md.appendMarkdown(`- **Status:** ${snapshot.agentState || 'IDLE'}\n`);
-    md.appendMarkdown(`- **Remaining Quota:** ${quotaText} ${snapshot.isEstimate ? '*(Estimate)*' : ''}\n`);
-    md.appendMarkdown(`- **Quota Reset:** ${countdown}\n`);
+    md.appendMarkdown(`- **State:** ${snapshot.agentState || 'IDLE'}\n`);
+    md.appendMarkdown(`- **Today:** ${(snapshot.todayTokens || 0).toLocaleString()} tokens (${snapshot.todayPrompts || 0} prompts)\n`);
+    md.appendMarkdown(`- **This Week:** ${(snapshot.weekTokens || 0).toLocaleString()} tokens (${snapshot.weekPrompts || 0} prompts)\n`);
+    if (snapshot.conversationId) {
+      md.appendMarkdown(`- **Active Conversation:** \`${snapshot.conversationId.slice(0, 8)}...\` (${snapshot.turnCount || 0} turns)\n`);
+    }
+    md.appendMarkdown(`- **Quota:** *Unavailable* (Antigravity does not expose quota locally)\n`);
     md.appendMarkdown(
       `- **Context Usage:** ${snapshot.contextPercentage}% (${(
         (snapshot.contextTokens || 0) / 1000

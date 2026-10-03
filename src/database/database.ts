@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { SCHEMA_SQL } from './schema';
+import { SCHEMA_SQL, MIGRATION_SQL, COLUMN_MIGRATIONS } from './schema';
 
 export interface IDatabase {
   exec(sql: string): void;
@@ -14,7 +14,7 @@ export class AppDatabase implements IDatabase {
   private dbInstance: any;
   private dbPath: string;
 
-  constructor(storageDir: string, dbName: string = 'antigravity_usage.db') {
+  constructor(storageDir: string, dbName: string = 'antigravity_analytics.db') {
     if (!fs.existsSync(storageDir)) {
       fs.mkdirSync(storageDir, { recursive: true });
     }
@@ -32,7 +32,24 @@ export class AppDatabase implements IDatabase {
       throw new Error('SQLite engine could not be initialized.');
     }
 
+    // Run migration to drop old duplicating usage table
+    try {
+      this.exec(MIGRATION_SQL);
+    } catch {
+      // Migration may fail if table doesn't exist, that's fine
+    }
+
+    // Create schema (IF NOT EXISTS is safe to re-run)
     this.exec(SCHEMA_SQL);
+
+    // Run column migrations safely — each may fail if column already exists
+    for (const sql of COLUMN_MIGRATIONS) {
+      try {
+        this.exec(sql);
+      } catch {
+        // Column already exists, skip
+      }
+    }
   }
 
   public exec(sql: string): void {

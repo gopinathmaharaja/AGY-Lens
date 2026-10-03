@@ -48,7 +48,12 @@ export class StatusParser {
       workspace: raw.workspace || '',
       planTier: raw.planTier || 'Antigravity Pro',
       agentState: raw.agentState || 'IDLE',
-      isEstimate: raw.isEstimate ?? true
+      isEstimate: raw.isEstimate ?? false,
+      todayTokens: raw.todayTokens || 0,
+      todayPrompts: raw.todayPrompts || 0,
+      weekTokens: raw.weekTokens || 0,
+      weekPrompts: raw.weekPrompts || 0,
+      turnCount: raw.turnCount || 0
     };
 
     return AntigravityUsageSnapshotSchema.parse(snapshot);

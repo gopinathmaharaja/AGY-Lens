@@ -10,7 +10,7 @@ export class InsightRepository {
        VALUES (?, ?, ?, ?, ?)`,
       [insight.type, insight.title, insight.description, insight.severity, insight.created_at]
     );
-    return res.lastInsertRowid;
+    return res.lastInsertRowid !== undefined ? Number(res.lastInsertRowid) : undefined;
   }
 
   public getRecent(limit: number = 20): InsightRecord[] {

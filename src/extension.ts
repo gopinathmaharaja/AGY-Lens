@@ -103,6 +103,22 @@ export function activate(context: vscode.ExtensionContext) {
         }
       );
     }),
+    vscode.commands.registerCommand('antigravity.rescanAllHistory', async () => {
+      vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Rescanning all Antigravity conversations across CLI, App, and IDE...'
+        },
+        async () => {
+          const res = await syncService!.scanAllHistory();
+          const snapshot = await syncService!.sync();
+          statusBar?.update(snapshot);
+          vscode.window.showInformationMessage(
+            `Indexed ${res.conversations} conversations and ${res.prompts} prompts across CLI, Desktop App, and IDE.`
+          );
+        }
+      );
+    }),
     vscode.commands.registerCommand('antigravity.analyzePrompt', () => {
       analyzePromptCommand();
     }),

@@ -91,6 +91,11 @@ export class DashboardPanel {
             await this.syncService.sync();
             await this.sendData();
             break;
+          case 'rescanAll':
+            await this.syncService.scanAllHistory();
+            await this.sendData();
+            vscode.window.showInformationMessage('Indexed all conversations across CLI, Desktop App, and IDE.');
+            break;
           case 'analyzePrompt': {
             const analysis = PromptAnalyzer.analyze(message.prompt);
             this.panel.webview.postMessage({
@@ -139,25 +144,30 @@ export class DashboardPanel {
   public async sendData(): Promise<void> {
     const snapshot = this.syncService.getLastSnapshot();
     const todaySummary = this.usageRepo.getTodaySummary();
+    const weekSummary = this.usageRepo.getWeekSummary();
+    const currentModel = this.antigravityCollector.getCurrentModel();
     const dailyUsage = this.usageRepo.getDailyUsage(30);
     const modelUsage = this.usageRepo.getModelUsage();
-    const recentPrompts = this.promptRepo.getRecent(30);
-    const recentSessions = this.sessionRepo.getRecent(20);
+    const usageBySource = this.usageRepo.getUsageBySource();
+    const tokensByCategory = this.usageRepo.getTokensByCategory();
+    const recentPrompts = this.promptRepo.getRecent(500);
+    const recentSessions = this.sessionRepo.getRecent(100);
+    const expensivePrompts = this.promptRepo.getExpensivePrompts(20000, 10);
     const categoryDistribution = this.promptRepo.getCategoryDistribution();
     const avgScore = this.promptRepo.getAverageScore();
     const profile = UsageAnalyzer.generateProfile(
-      this.promptRepo.getRecent(100),
+      recentPrompts.slice(0, 100),
       recentSessions,
-      this.usageRepo.getDailyUsage(30) as any
+      dailyUsage as any
     );
     const forecast = QuotaPredictor.forecast(
-      this.usageRepo.getDailyUsage(30) as any,
+      dailyUsage as any,
       this.quotaRepo.getLatest()
     );
     const weeklyReport = UsageAnalyzer.generateWeeklyReport(
       recentPrompts,
       recentSessions,
-      this.usageRepo.getDailyUsage(7) as any,
+      dailyUsage as any,
       modelUsage
     );
 
@@ -166,10 +176,15 @@ export class DashboardPanel {
       payload: {
         snapshot,
         todaySummary,
+        weekSummary,
+        currentModel,
         dailyUsage,
         modelUsage,
+        usageBySource,
+        tokensByCategory,
         recentPrompts,
         recentSessions,
+        expensivePrompts,
         categoryDistribution,
         avgScore,
         profile,
@@ -350,48 +365,54 @@ export class DashboardPanel {
   <div class="header">
     <div class="title-group">
       <h1>🚀 Antigravity Usage Intelligence</h1>
-      <p>Local-First Analytics, Prompt Quality Scoring & Usage Coaching</p>
+      <p>Multi-Source Analytics (CLI, Desktop App, IDE), Quality Scoring & Token Tracking</p>
     </div>
     <div>
-      <button class="btn" id="btn-refresh">Refresh</button>
+      <button class="btn" id="btn-refresh">Live Sync</button>
+      <button class="btn btn-secondary" id="btn-rescan">Rescan All History</button>
     </div>
   </div>
 
   <div class="tabs">
     <div class="tab active" data-tab="overview">Overview</div>
-    <div class="tab" data-tab="prompts">Prompt Coach</div>
-    <div class="tab" data-tab="models">Models</div>
+    <div class="tab" data-tab="prompts">Prompt Coach & History</div>
+    <div class="tab" data-tab="models">Models & Sources</div>
     <div class="tab" data-tab="profile">Personal Profile</div>
     <div class="tab" data-tab="report">Weekly Report</div>
   </div>
 
   <!-- OVERVIEW TAB -->
   <div id="tab-overview" class="tab-content active">
-    <div class="grid-4">
+    <div class="grid-4" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
       <div class="card">
         <div class="card-label">Current Model</div>
-        <div class="card-value" id="val-model">--</div>
-        <div class="card-sub" id="val-agent-state">State: IDLE</div>
+        <div class="card-value" id="val-model" style="font-size: 18px; word-break: break-word;">--</div>
+        <div class="card-sub" id="val-agent-state">Runtime: IDLE</div>
       </div>
       <div class="card">
-        <div class="card-label">Remaining Quota</div>
-        <div class="card-value" id="val-quota">--%</div>
-        <div class="card-sub" id="val-reset">Reset: --</div>
+        <div class="card-label">Today's Tokens</div>
+        <div class="card-value" id="val-today-tokens" style="color: #89b4fa;">0</div>
+        <div class="card-sub" id="val-requests">0 prompts</div>
       </div>
       <div class="card">
-        <div class="card-label">Today's Requests</div>
-        <div class="card-value" id="val-requests">0</div>
-        <div class="card-sub" id="val-tokens">0 tokens</div>
+        <div class="card-label">This Week</div>
+        <div class="card-value" id="val-week-tokens" style="color: #cba6f7;">0</div>
+        <div class="card-sub" id="val-week-prompts">0 prompts</div>
       </div>
       <div class="card">
         <div class="card-label">Avg Prompt Score</div>
-        <div class="card-value" id="val-avg-score">--/100</div>
+        <div class="card-value" id="val-avg-score" style="color: #f9e2af;">--/100</div>
         <div class="card-sub" id="val-context">Context: 0%</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Remaining Quota</div>
+        <div class="card-value" id="val-quota" style="font-size: 18px; color: var(--subtext);">Unavailable</div>
+        <div class="card-sub" id="val-reset">Not exposed locally</div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom: 24px;">
-      <div class="card-label">Context Window Usage</div>
+      <div class="card-label">Context Window Usage (Active Session)</div>
       <div class="progress-bar-bg">
         <div class="progress-bar-fill" id="val-context-bar"></div>
       </div>
@@ -399,19 +420,21 @@ export class DashboardPanel {
     </div>
 
     <div class="card">
-      <div class="section-title">Recent Conversations</div>
+      <div class="section-title">All Conversations (CLI, Desktop App, IDE)</div>
       <table>
         <thead>
           <tr>
+            <th>Source</th>
             <th>Conversation ID</th>
             <th>Model</th>
             <th>Steps</th>
+            <th>Est. Tokens</th>
             <th>State</th>
-            <th>Last Active</th>
+            <th>Started</th>
           </tr>
         </thead>
         <tbody id="sessions-table-body">
-          <tr><td colspan="5" style="text-align: center; color: var(--subtext);">Loading conversations...</td></tr>
+          <tr><td colspan="7" style="text-align: center; color: var(--subtext);">Loading conversations...</td></tr>
         </tbody>
       </table>
     </div>
@@ -448,19 +471,32 @@ export class DashboardPanel {
     </div>
 
     <div class="card">
-      <div class="section-title">Prompt History & Scores</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <div class="section-title" style="margin-bottom: 0;">Prompt History & Token Usage (All Sources)</div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="input-search-prompts" placeholder="Search prompts..." style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:4px; font-size:12px; min-width: 180px;">
+          <select id="select-source-filter" style="background:var(--bg); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:4px; font-size:12px;">
+            <option value="all">All Sources</option>
+            <option value="cli">📟 CLI</option>
+            <option value="app">🖥️ App</option>
+            <option value="ide">💻 IDE</option>
+          </select>
+        </div>
+      </div>
       <table>
         <thead>
           <tr>
+            <th>Source</th>
             <th>Prompt</th>
             <th>Category</th>
+            <th>Est. Tokens</th>
             <th>Score</th>
             <th>Missing Elements</th>
             <th>Timestamp</th>
           </tr>
         </thead>
         <tbody id="prompts-table-body">
-          <tr><td colspan="5" style="text-align: center; color: var(--subtext);">No prompts recorded yet</td></tr>
+          <tr><td colspan="7" style="text-align: center; color: var(--subtext);">No prompts recorded yet</td></tr>
         </tbody>
       </table>
     </div>
@@ -547,6 +583,13 @@ export class DashboardPanel {
       vscode.postMessage({ command: 'refresh' });
     });
 
+    const rescanBtn = document.getElementById('btn-rescan');
+    if (rescanBtn) {
+      rescanBtn.addEventListener('click', () => {
+        vscode.postMessage({ command: 'rescanAll' });
+      });
+    }
+
     document.getElementById('btn-analyze-prompt').addEventListener('click', () => {
       const prompt = document.getElementById('coach-prompt-input').value;
       if (!prompt.trim()) return;
@@ -564,10 +607,21 @@ export class DashboardPanel {
       vscode.postMessage({ command: 'copyToClipboard', text });
     });
 
+    let lastDashboardData = null;
+
+    document.getElementById('input-search-prompts')?.addEventListener('input', () => {
+      if (lastDashboardData) renderFilteredPrompts(lastDashboardData);
+    });
+
+    document.getElementById('select-source-filter')?.addEventListener('change', () => {
+      if (lastDashboardData) renderFilteredPrompts(lastDashboardData);
+    });
+
     // Listen to messages from extension
     window.addEventListener('message', event => {
       const msg = event.data;
       if (msg.type === 'dashboardData') {
+        lastDashboardData = msg.payload;
         renderDashboard(msg.payload);
       } else if (msg.type === 'promptAnalyzed') {
         renderPromptAnalysis(msg.analysis);
@@ -578,37 +632,107 @@ export class DashboardPanel {
       }
     });
 
+    function renderFilteredPrompts(data) {
+      const q = (document.getElementById('input-search-prompts')?.value || '').toLowerCase();
+      const src = document.getElementById('select-source-filter')?.value || 'all';
+      const promptsBody = document.getElementById('prompts-table-body');
+      if (!promptsBody || !data.recentPrompts) return;
+
+      const filtered = data.recentPrompts.filter(p => {
+        if (src !== 'all' && p.source !== src) return false;
+        if (q && !p.prompt.toLowerCase().includes(q) && !(p.category || '').toLowerCase().includes(q)) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        promptsBody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--subtext);">No matching prompts found</td></tr>';
+        return;
+      }
+
+      promptsBody.innerHTML = filtered.map(p => {
+        const scoreClass = p.prompt_score >= 80 ? 'score-high' : p.prompt_score >= 50 ? 'score-mid' : 'score-low';
+        const srcBadge = p.source === 'ide' ? '💻 IDE' : p.source === 'app' ? '🖥️ App' : '📟 CLI';
+        const tokens = (p.estimated_input_tokens || 0) + (p.estimated_output_tokens || 0);
+        const tokenStr = tokens > 0 ? tokens.toLocaleString() + ' tk' : '--';
+        return \`
+          <tr>
+            <td><span class="score-badge" style="background:rgba(137,180,250,0.2);color:#89b4fa">\${srcBadge}</span></td>
+            <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="\${p.prompt.replace(/"/g, '&quot;')}">\${p.prompt}</td>
+            <td>\${p.category}</td>
+            <td><strong>\${tokenStr}</strong></td>
+            <td><span class="score-badge \${scoreClass}">\${p.prompt_score}/100</span></td>
+            <td style="color: var(--subtext); font-size: 11px;">\${p.missing_items || 'None'}</td>
+            <td style="font-size: 11px;">\${p.timestamp ? p.timestamp.slice(0, 16).replace('T', ' ') : '--'}</td>
+          </tr>
+        \`;
+      }).join('');
+    }
+
     function renderDashboard(data) {
       if (!data) return;
       const snap = data.snapshot || {};
-      document.getElementById('val-model').textContent = snap.model || 'Gemini 3.8 Flash';
-      document.getElementById('val-agent-state').textContent = 'State: ' + (snap.agentState || 'IDLE');
-      document.getElementById('val-quota').textContent = (snap.quotaRemaining !== null ? snap.quotaRemaining + '%' : '85%') + (snap.isEstimate ? ' (Est)' : '');
-      document.getElementById('val-reset').textContent = 'Reset: ' + (snap.quotaResetTime ? snap.quotaResetTime.slice(11, 16) : '4h 00m');
-
       const today = data.todaySummary || {};
-      document.getElementById('val-requests').textContent = today.requests || 0;
-      document.getElementById('val-tokens').textContent = (today.tokens || 0).toLocaleString() + ' tokens';
+      const week = data.weekSummary || {};
 
-      document.getElementById('val-avg-score').textContent = (data.avgScore || 78) + '/100';
+      const modelEl = document.getElementById('val-model');
+      if (modelEl) modelEl.textContent = data.currentModel || snap.model || 'Gemini 3.8 Flash';
+
+      const stateEl = document.getElementById('val-agent-state');
+      if (stateEl) stateEl.textContent = 'Runtime: ' + (snap.agentState || 'IDLE');
+
+      const quotaEl = document.getElementById('val-quota');
+      if (quotaEl) quotaEl.textContent = 'Unavailable';
+
+      const resetEl = document.getElementById('val-reset');
+      if (resetEl) resetEl.textContent = 'Not exposed locally';
+
+      const todayTokensEl = document.getElementById('val-today-tokens');
+      if (todayTokensEl) todayTokensEl.textContent = (today.tokens || 0).toLocaleString();
+
+      const reqEl = document.getElementById('val-requests');
+      if (reqEl) reqEl.textContent = (today.requests || 0) + ' prompts';
+
+      const weekTokensEl = document.getElementById('val-week-tokens');
+      if (weekTokensEl) weekTokensEl.textContent = (week.tokens || 0).toLocaleString() + ' tk';
+
+      const weekPromptsEl = document.getElementById('val-week-prompts');
+      if (weekPromptsEl) weekPromptsEl.textContent = (week.requests || 0) + ' prompts';
+
+      const scoreEl = document.getElementById('val-avg-score');
+      if (scoreEl) scoreEl.textContent = (data.avgScore || 0) + '/100';
+
       const ctxPercent = snap.contextPercentage || 0;
-      document.getElementById('val-context').textContent = 'Context: ' + ctxPercent + '%';
-      document.getElementById('val-context-bar').style.width = ctxPercent + '%';
-      document.getElementById('val-context-detail').textContent =
-        ((snap.contextTokens || 0) / 1000).toFixed(1) + 'k / ' + (snap.contextWindow / 1000).toFixed(0) + 'k tokens (' + ctxPercent + '%)';
+      const ctxEl = document.getElementById('val-context');
+      if (ctxEl) ctxEl.textContent = 'Context: ' + ctxPercent + '%';
+
+      const ctxBar = document.getElementById('val-context-bar');
+      if (ctxBar) ctxBar.style.width = ctxPercent + '%';
+
+      const ctxDetail = document.getElementById('val-context-detail');
+      if (ctxDetail) {
+        ctxDetail.textContent =
+          ((snap.contextTokens || 0) / 1000).toFixed(1) + 'k / ' + (snap.contextWindow / 1000).toFixed(0) + 'k tokens (' + ctxPercent + '%)';
+      }
 
       // Sessions
       const sessionsBody = document.getElementById('sessions-table-body');
       if (data.recentSessions && data.recentSessions.length > 0) {
-        sessionsBody.innerHTML = data.recentSessions.map(s => \`
+        sessionsBody.innerHTML = data.recentSessions.map(s => {
+          const srcBadge = s.source === 'ide' ? '💻 IDE' : s.source === 'app' ? '🖥️ App' : '📟 CLI';
+          const tokens = (s.total_estimated_input_tokens || 0) + (s.total_estimated_output_tokens || 0);
+          const tokenStr = tokens > 0 ? tokens.toLocaleString() : '--';
+          return \`
           <tr>
+            <td><span class="score-badge" style="background:rgba(137,180,250,0.2);color:#89b4fa">\${srcBadge}</span></td>
             <td style="font-family: monospace;">\${s.conversation_id.slice(0, 12)}...</td>
             <td>\${s.model || 'Gemini'}</td>
             <td>\${s.step_count}</td>
+            <td>\${tokenStr}</td>
             <td><span class="score-badge \${s.agent_state === 'RUNNING' ? 'score-high' : 'score-mid'}">\${s.agent_state}</span></td>
             <td>\${s.started_at ? s.started_at.slice(0, 16).replace('T', ' ') : '--'}</td>
           </tr>
-        \`).join('');
+        \`;
+        }).join('');
       }
 
       // Prompts
@@ -616,13 +740,18 @@ export class DashboardPanel {
       if (data.recentPrompts && data.recentPrompts.length > 0) {
         promptsBody.innerHTML = data.recentPrompts.map(p => {
           const scoreClass = p.prompt_score >= 80 ? 'score-high' : p.prompt_score >= 50 ? 'score-mid' : 'score-low';
+          const srcBadge = p.source === 'ide' ? '💻 IDE' : p.source === 'app' ? '🖥️ App' : '📟 CLI';
+          const tokens = (p.estimated_input_tokens || 0) + (p.estimated_output_tokens || 0);
+          const tokenStr = tokens > 0 ? tokens.toLocaleString() + ' tk' : '--';
           return \`
             <tr>
+              <td><span class="score-badge" style="background:rgba(137,180,250,0.2);color:#89b4fa">\${srcBadge}</span></td>
               <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${p.prompt}</td>
               <td>\${p.category}</td>
+              <td><strong>\${tokenStr}</strong></td>
               <td><span class="score-badge \${scoreClass}">\${p.prompt_score}/100</span></td>
               <td style="color: var(--subtext); font-size: 11px;">\${p.missing_items || 'None'}</td>
-              <td style="font-size: 11px;">\${p.timestamp ? p.timestamp.slice(11, 16) : '--'}</td>
+              <td style="font-size: 11px;">\${p.timestamp ? p.timestamp.slice(0, 16).replace('T', ' ') : '--'}</td>
             </tr>
           \`;
         }).join('');
@@ -659,16 +788,59 @@ export class DashboardPanel {
       // Weekly Report
       if (data.weeklyReport) {
         const wr = data.weeklyReport;
+        let expensiveHtml = '';
+        if (wr.topExpensivePrompts && wr.topExpensivePrompts.length > 0) {
+          expensiveHtml = \`
+            <h4 style="margin-top: 16px; color: #fff;">🔥 Top Token-Intensive Prompts This Week:</h4>
+            <ul style="padding-left: 20px; font-size: 12px; margin-top: 6px;">
+              \${wr.topExpensivePrompts.map(p => \`
+                <li style="margin-bottom: 4px;">
+                  <strong>\${p.tokens.toLocaleString()} tk</strong>: "\${p.prompt.slice(0, 80)}..." (\${p.category})
+                </li>
+              \`).join('')}
+            </ul>
+          \`;
+        }
+
+        let diagHtml = '';
+        if (wr.lowestScoringPrompts && wr.lowestScoringPrompts.length > 0) {
+          diagHtml = \`
+            <h4 style="margin-top: 16px; color: var(--warning);">⚠️ Low Scoring Prompt Diagnostics:</h4>
+            <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 8px;">
+              \${wr.lowestScoringPrompts.map(lp => \`
+                <div style="background: var(--card-bg); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border);">
+                  <div><strong>"\${lp.prompt.slice(0, 70)}..."</strong> <span class="score-badge score-low">\${lp.score}/100</span></div>
+                  <div style="color: var(--accent); font-size: 11px; margin-top: 2px;">💡 \${lp.suggestion}</div>
+                </div>
+              \`).join('')}
+            </div>
+          \`;
+        }
+
         document.getElementById('report-content').innerHTML = \`
-          <p><strong>Sessions Analyzed:</strong> \${wr.sessionsCount}</p>
-          <p><strong>Total Prompts:</strong> \${wr.promptsCount}</p>
-          <p><strong>Total Tokens Consumed:</strong> \${wr.tokensCount.toLocaleString()}</p>
-          <p><strong>Average Prompt Score:</strong> \${wr.avgPromptScore}/100</p>
-          <p><strong>Primary Model:</strong> \${wr.mostUsedModel}</p>
-          <p><strong>Most Frequent Task:</strong> \${wr.mostCommonTask}</p>
-          <p><strong>Average Context Usage:</strong> \${wr.avgContextPercentage}%</p>
-          <h4 style="margin-top: 16px; color: #fff;">Key Recommendations for Next Week:</h4>
-          <ul style="padding-left: 20px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px;">
+            <div class="card" style="padding: 10px;">
+              <div class="card-label">Prompts</div>
+              <div style="font-size: 18px; font-weight: 700; color: #fff;">\${wr.promptsCount}</div>
+            </div>
+            <div class="card" style="padding: 10px;">
+              <div class="card-label">Tokens</div>
+              <div style="font-size: 18px; font-weight: 700; color: #89b4fa;">\${wr.tokensCount.toLocaleString()}</div>
+            </div>
+            <div class="card" style="padding: 10px;">
+              <div class="card-label">Quality Score</div>
+              <div style="font-size: 18px; font-weight: 700; color: #a6e3a1;">\${wr.avgPromptScore}/100</div>
+            </div>
+            <div class="card" style="padding: 10px;">
+              <div class="card-label">Sessions</div>
+              <div style="font-size: 18px; font-weight: 700; color: #cba6f7;">\${wr.sessionsCount}</div>
+            </div>
+          </div>
+          <p><strong>Primary Model:</strong> \${wr.mostUsedModel} | <strong>Most Common Task:</strong> \${wr.mostCommonTask}</p>
+          \${expensiveHtml}
+          \${diagHtml}
+          <h4 style="margin-top: 16px; color: #fff;">🎯 Data-Driven Coaching Recommendations:</h4>
+          <ul style="padding-left: 20px; margin-top: 6px; line-height: 1.8;">
             \${wr.improvementAreas.map(i => \`<li>\${i}</li>\`).join('')}
           </ul>
         \`;

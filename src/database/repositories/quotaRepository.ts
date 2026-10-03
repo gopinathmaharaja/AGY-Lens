@@ -5,10 +5,15 @@ export class QuotaRepository {
   constructor(private db: IDatabase) {}
 
   public recordQuota(record: QuotaRecord): void {
+    // Only record if we actually have a measured value
+    if (record.remaining === null && record.reset_time === null) {
+      return;
+    }
+
     this.db.run(
-      `INSERT INTO quota (model, remaining, reset_time, timestamp, is_estimate)
+      `INSERT INTO quota (model, remaining, reset_time, timestamp, source)
        VALUES (?, ?, ?, ?, ?)`,
-      [record.model, record.remaining, record.reset_time, record.timestamp, record.is_estimate]
+      [record.model, record.remaining, record.reset_time, record.timestamp, record.source || 'observed']
     );
   }
 

@@ -43,6 +43,11 @@
         "category": "Antigravity Usage"
       },
       {
+        "command": "antigravity.rescanAllHistory",
+        "title": "Rescan All History (CLI, App, IDE)",
+        "category": "Antigravity Usage"
+      },
+      {
         "command": "antigravity.analyzePrompt",
         "title": "Analyze Prompt",
         "category": "Antigravity Usage"
